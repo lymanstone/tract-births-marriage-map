@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Births, Marriage &amp; Boost by Census Tract</title>
+<title>Births, Marriage &amp; Boost Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -32,6 +32,7 @@
   .panel {
     position: absolute; top: 16px; left: 16px; z-index: 5;
     width: 340px; max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px); overflow-y: auto;
     background: var(--beige); border: 1px solid var(--rule);
     border-top: 4px solid var(--navy);
     border-radius: 4px; padding: 16px 18px 14px;
@@ -45,6 +46,22 @@
     font-family: var(--serif); font-weight: 700; font-size: 23px; line-height: 1.18;
     margin: 0 0 12px; color: var(--ink); text-wrap: balance;
   }
+  .ctl-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 5px;
+  }
+  .levels {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    background: var(--beige-2); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 3px; margin-bottom: 12px;
+  }
+  .levels button {
+    font: 700 12px/1 var(--sans); padding: 8px 2px; border: 0; border-radius: 3px; cursor: pointer;
+    background: transparent; color: var(--ink-2);
+  }
+  .levels button:hover { background: #fff; color: var(--navy); }
+  .levels button[aria-pressed="true"] { background: #fff; color: var(--navy); box-shadow: inset 0 0 0 1.5px var(--navy); }
+  .levels button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 1px; }
   .modes {
     display: grid; grid-template-columns: repeat(3, 1fr);
     border: 1px solid var(--navy); border-radius: 4px; overflow: hidden; margin-bottom: 12px;
@@ -83,7 +100,7 @@
 
   .tip {
     position: absolute; z-index: 6; pointer-events: none; display: none;
-    width: 270px; background: #fff; border: 1px solid var(--rule); border-radius: 4px;
+    width: 290px; background: #fff; border: 1px solid var(--rule); border-radius: 4px;
     padding: 10px 12px; box-shadow: 0 4px 16px rgba(18, 18, 18, .18); font-size: 13px;
   }
   .tip .t1 { font-family: var(--serif); font-weight: 700; font-size: 15px; line-height: 1.2; }
@@ -95,6 +112,8 @@
   .tip .row b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tip .row small { color: var(--ink-3); font-weight: 400; font-size: 11px; }
   .tip .row.on { background: var(--beige-2); color: var(--ink); }
+  .tip .row.sub { padding: 2px 6px 2px 22px; font-size: 12px; }
+  .tip .row.sub b { font-weight: 700; }
   .tip .row .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; border: 1px solid rgba(18,18,18,.15); }
   .tip .foot { color: var(--ink-3); font-size: 11px; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--rule-2); line-height: 1.4; }
 
@@ -110,17 +129,27 @@
   @media (max-width: 640px) {
     .panel { top: 8px; left: 8px; max-width: calc(100vw - 16px); padding: 10px 12px; }
     h1 { font-size: 18px; margin-bottom: 8px; }
-    .eyebrow, .desc, .rules, .source { display: none; }
-    .tip { width: 240px; }
+    .eyebrow, .ctl-label, .desc, .rules, .source { display: none; }
+    .levels, .modes { margin-bottom: 8px; }
+    .tip { width: 250px; }
   }
 </style>
 </head>
 <body>
-<div id="map" role="application" aria-label="Map of U.S. census tracts"></div>
+<div id="map" role="application" aria-label="Map of U.S. births and marriage"></div>
 
 <section class="panel" aria-label="Map controls and legend">
-  <p class="eyebrow">Census tracts · ACS 2020–2024</p>
-  <h1>Births and Marriage, Neighborhood by Neighborhood</h1>
+  <p class="eyebrow" id="eyebrow">Census tracts · ACS 2020–2024</p>
+  <h1 id="title">Births and Marriage, Neighborhood by Neighborhood</h1>
+  <div id="level-ctl">
+    <p class="ctl-label" id="level-label">Show by</p>
+    <div class="levels" role="group" aria-labelledby="level-label">
+      <button type="button" data-level="tract" aria-pressed="true">Tract</button>
+      <button type="button" data-level="county" aria-pressed="false">County</button>
+      <button type="button" data-level="metro" aria-pressed="false">Metro</button>
+      <button type="button" data-level="state" aria-pressed="false">State</button>
+    </div>
+  </div>
   <div class="modes" role="group" aria-label="Map mode">
     <button type="button" data-mode="b" aria-pressed="true">Birth rate</button>
     <button type="button" data-mode="m" aria-pressed="false">Married share</button>
@@ -128,11 +157,11 @@
   </div>
   <p class="legend-title" id="legend-title"></p>
   <div class="legend" id="legend"></div>
-  <div class="legend-foot"><span id="us-avg"></span><span class="nd"><i></i>No data</span></div>
+  <div class="legend-foot"><span id="us-avg"></span><span class="nd" id="nd-key"><i></i>No data</span></div>
   <div id="desc"></div>
   <p class="source">Source: U.S. Census Bureau, American Community Survey 2020–2024 five-year estimates
-    (tables B13002, B12001, B01003). Tract estimates come from small samples and can be imprecise;
-    hover a tract for its margin of error.</p>
+    (tables B13002, B12001, B01003). Small-area estimates come from small samples and can be imprecise;
+    hover an area for its margin of error.</p>
 </section>
 
 <div class="tip" id="tip" role="status"></div>
@@ -169,7 +198,7 @@
   } catch (e) {
     fail('Could not load the map data.'); console.error(e); return;
   }
-  const D = H.data, N = H.geoids.length, US = H.us;
+  const D = H.data, N = H.geoids.length, US = H.us, L = H.levels || {};
 
   // arcs: varint point count, then zigzag varint x/y deltas
   const arcs = new Array(H.nArcs);
@@ -189,21 +218,10 @@
   }
   arcBuf = null;
 
-  // per-tract values
-  const val = { b: new Float32Array(N), m: new Float32Array(N), s: new Int8Array(N) };
-  for (let i = 0; i < N; i++) {
-    const ok = D.pop[i] > 0 && D.p15[i] > 0;
-    val.b[i] = ok ? 1000 * D.births[i] / D.pop[i] : -1;
-    val.m[i] = ok ? 100 * D.married[i] / D.p15[i] : -1;
-    val.s[i] = ok ? D.bpts[i] + D.mpts[i] : -1;
-  }
-
-  // tract polygons + county/state border arcs
-  const owner = new Int32Array(H.nArcs).fill(-1), border = new Uint8Array(H.nArcs);
-  const features = new Array(N);
-  for (let i = 0; i < N; i++) {
+  // polygons of arc references -> GeoJSON MultiPolygon coordinates
+  function ringsFrom(polys, onArc) {
     const coords = [];
-    for (const poly of H.arcs[i]) {
+    for (const poly of polys) {
       const rings = [];
       for (const ring of poly) {
         const out = [];
@@ -211,27 +229,71 @@
           const rev = ref < 0, ai = rev ? ~ref : ref, a = arcs[ai], n = a.length / 2;
           if (rev) for (let k = n - 1; k > 0; k--) out.push([a[2 * k], a[2 * k + 1]]);
           else for (let k = 0; k < n - 1; k++) out.push([a[2 * k], a[2 * k + 1]]);
-          if (owner[ai] === -1) owner[ai] = i;
-          else if (owner[ai] !== i) {
-            const g1 = H.geoids[i], g2 = H.geoids[owner[ai]];
-            if (g1.slice(0, 2) !== g2.slice(0, 2)) border[ai] = 2;
-            else if (g1.slice(0, 5) !== g2.slice(0, 5)) border[ai] = 1;
-          }
+          if (onArc) onArc(ai);
         }
         out.push(out[0]);
         rings.push(out);
       }
       coords.push(rings);
     }
+    return coords;
+  }
+
+  // ---------------------------------------------------------------- levels
+  const LEVELS = {
+    tract:  { eyebrow: 'Census tracts', h1: 'Neighborhood by Neighborhood', src: 'tracts',    noun: 'tract',
+              loading: 'Drawing 85,000 census tracts…' },
+    county: { eyebrow: 'Counties',      h1: 'County by County',             src: 'lv-county', noun: 'county',
+              loading: 'Drawing 3,222 counties…' },
+    metro:  { eyebrow: 'Metro areas',   h1: 'Metro by Metro',               src: 'lv-metro',  noun: 'area',
+              loading: 'Drawing metro areas…',
+              note: '<p class="desc">Metro areas are the 393 Metropolitan Statistical Areas (2023 definitions). Each state’s counties outside them are grouped as one “Nonmetro” area.</p>' },
+    state:  { eyebrow: 'States',        h1: 'State by State',               src: 'lv-state',  noun: 'state',
+              loading: 'Drawing states…' },
+  };
+  const fillId = (lv) => (lv === 'tract' ? 'tract-fill' : LEVELS[lv].src + '-fill');
+  let level = 'tract';
+  if (!H.levels) $('level-ctl').style.display = 'none';
+
+  // per-area values: b = births per 1,000, m = married %, s = Boost
+  const vals = { tract: { b: new Float32Array(N), m: new Float32Array(N), s: new Float32Array(N) } };
+  for (let i = 0; i < N; i++) {
+    const ok = D.pop[i] > 0 && D.p15[i] > 0, v = vals.tract;
+    v.b[i] = ok ? 1000 * D.births[i] / D.pop[i] : -1;
+    v.m[i] = ok ? 100 * D.married[i] / D.p15[i] : -1;
+    v.s[i] = ok ? D.bpts[i] + D.mpts[i] : -1;
+  }
+  for (const lv in L) {
+    const d = L[lv].data, n = L[lv].ids.length;
+    const v = vals[lv] = { b: new Float32Array(n), m: new Float32Array(n), s: new Float32Array(n) };
+    for (let i = 0; i < n; i++) {
+      v.b[i] = d.pop[i] > 0 ? 1000 * d.births[i] / d.pop[i] : -1;
+      v.m[i] = d.p15[i] > 0 ? 100 * d.married[i] / d.p15[i] : -1;
+      v.s[i] = d.avg[i] < 0 ? -1 : d.avg[i] / 100;   // population-weighted average of tract scores
+    }
+  }
+  const props = (v, i) => ({ b: +v.b[i].toFixed(2), m: +v.m[i].toFixed(2), s: +v.s[i].toFixed(2) });
+
+  // tract polygons + county/state border arcs
+  const owner = new Int32Array(H.nArcs).fill(-1), border = new Uint8Array(H.nArcs);
+  const features = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const coords = ringsFrom(H.arcs[i], (ai) => {
+      if (owner[ai] === -1) owner[ai] = i;
+      else if (owner[ai] !== i) {
+        const g1 = H.geoids[i], g2 = H.geoids[owner[ai]];
+        if (g1.slice(0, 2) !== g2.slice(0, 2)) border[ai] = 2;
+        else if (g1.slice(0, 5) !== g2.slice(0, 5)) border[ai] = 1;
+      }
+    });
     features[i] = {
-      type: 'Feature', id: i,
-      properties: { b: +val.b[i].toFixed(2), m: +val.m[i].toFixed(2), s: val.s[i] },
+      type: 'Feature', id: i, properties: props(vals.tract, i),
       geometry: { type: 'MultiPolygon', coordinates: coords },
     };
   }
-  const lines = (level) => {
+  const lines = (lvl) => {
     const out = [];
-    for (let a = 0; a < H.nArcs; a++) if (border[a] === level) {
+    for (let a = 0; a < H.nArcs; a++) if (border[a] === lvl) {
       const arc = arcs[a], line = [];
       for (let k = 0; k < arc.length; k += 2) line.push([arc[k], arc[k + 1]]);
       out.push(line);
@@ -241,8 +303,23 @@
   const countyLines = lines(1), stateLines = lines(2);
   H.arcs = null;
 
+  function levelData(lv) {
+    const G = L[lv], feats = new Array(G.ids.length);
+    for (let i = 0; i < feats.length; i++) feats[i] = {
+      type: 'Feature', id: i, properties: props(vals[lv], i),
+      geometry: { type: 'MultiPolygon', coordinates: ringsFrom(G.arcs[i]) },
+    };
+    G.arcs = null;
+    return { type: 'FeatureCollection', features: feats };
+  }
+
   // ----------------------------------------------------------------- modes
   const NODATA = getComputedStyle(document.documentElement).getPropertyValue('--nodata').trim();
+  const RULES = '<table class="rules"><tr><td>More than 1 point above the U.S. average</td><td>5 pts</td></tr>' +
+    '<tr><td>At the average, or up to 1 point above</td><td>3 pts</td></tr>' +
+    '<tr><td>Up to 1 point below the average</td><td>1 pt</td></tr>' +
+    '<tr><td>More than 1 point below</td><td>0 pts</td></tr></table>';
+  const NATIONAL = '(' + (US.b / 10).toFixed(2) + '% of residents nationally) and its married share (' + US.m.toFixed(1) + '% nationally):';
   const MODES = {
     b: {
       title: 'Births per 1,000 residents, past 12 months',
@@ -263,30 +340,56 @@
       breaks: [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 7, 9],
       labels: ['0', '1', '2', '3', '4', '5', '6', '8', '10'],
       avg: 'Up to 5 points each for births and marriage',
-      desc: '<p class="desc">Each tract earns points for its birth rate (' + (US.b / 10).toFixed(2) +
-        '% of residents nationally) and its married share (' + US.m.toFixed(1) + '% nationally):</p>' +
-        '<table class="rules"><tr><td>More than 1 point above the U.S. average</td><td>5 pts</td></tr>' +
-        '<tr><td>At the average, or up to 1 point above</td><td>3 pts</td></tr>' +
-        '<tr><td>Up to 1 point below the average</td><td>1 pt</td></tr>' +
-        '<tr><td>More than 1 point below</td><td>0 pts</td></tr></table>',
+      desc: '<p class="desc">Each tract earns points for its birth rate ' + NATIONAL + '</p>' + RULES,
     },
   };
-  for (const k in MODES) MODES[k].colors = H.ramps[k];
-  const colorFor = (k, v) => {
+  // County, metro and state values vary less than tracts, so they get a finer scale.
+  const AGG = {
+    b: {
+      breaks: [9, 10, 11, 12, 13, 14],
+      labels: ['<9', '9–10', '10–11', '11–12', '12–13', '13–14', '14+'],
+      desc: (n) => '<p class="desc">The ACS’s own birth-rate estimate for the whole ' + n +
+        ': women ages 15–50 who gave birth in the past 12 months, divided by total population. ' +
+        'The scale is finer than in the tract view.</p>',
+    },
+    m: {
+      breaks: [42, 44, 46, 48, 50, 52],
+      labels: ['<42%', '42–44', '44–46', '46–48', '48–50', '50–52', '52%+'],
+      desc: (n) => '<p class="desc">The ACS’s own estimate for the whole ' + n +
+        ': people currently married (not counting those separated) as a share of everyone 15 and older. ' +
+        'The scale is finer than in the tract view.</p>',
+    },
+    s: {
+      title: 'Average tract Boost score, 0 to 10',
+      breaks: [3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5],
+      labels: ['<3', '3', '3.5', '4', '4.5', '5', '5.5', '6', '6.5+'],
+      avg: 'U.S. average: ' + (US.avg || 0).toFixed(1),
+      desc: (n) => '<p class="desc">How much the ' + n + '’s neighborhoods benefit on average: the Boost scores of its census tracts, ' +
+        'averaged by population, so it is the score the typical resident’s tract earns. Each tract earns points for its birth rate ' +
+        NATIONAL + '</p>' + RULES,
+    },
+  };
+  for (const k in MODES) { MODES[k].colors = H.ramps[k]; AGG[k].colors = H.ramps[k]; }
+  const info = (k, lv) => {
+    if (lv === 'tract') return MODES[k];
+    const a = AGG[k];
+    return Object.assign({}, MODES[k], a, { desc: a.desc(LEVELS[lv].noun) + (LEVELS[lv].note || '') });
+  };
+  const colorFor = (k, v, lv) => {
     if (v < 0) return NODATA;
-    const m = MODES[k]; let i = 0;
+    const m = info(k, lv); let i = 0;
     while (i < m.breaks.length && v >= m.breaks[i]) i++;
     return m.colors[i];
   };
-  const paintFor = (k) => {
-    const m = MODES[k], step = ['step', ['get', k], m.colors[0]];
+  const paintFor = (k, lv) => {
+    const m = info(k, lv), step = ['step', ['get', k], m.colors[0]];
     m.breaks.forEach((b, i) => step.push(b, m.colors[i + 1]));
     return ['case', ['<', ['get', k], 0], NODATA, step];
   };
   let mode = 'b';
 
   // ------------------------------------------------------------------- map
-  // Basemap (roads, water, place names) from OpenFreeMap; the tract layers still
+  // Basemap (roads, water, place names) from OpenFreeMap; the data layers still
   // work on a plain background if it cannot be reached.
   const style = await stylePromise;
   const map = new maplibregl.Map({
@@ -295,7 +398,7 @@
     bounds: [[-125, 24], [-66.5, 49.6]],
     fitBoundsOptions: { padding: { top: 30, bottom: 30, left: window.innerWidth > 900 ? 370 : 20, right: 20 } },
     minZoom: 2.5, maxZoom: 15, dragRotate: false, pitchWithRotate: false,
-    attributionControl: { compact: true, customAttribution: 'Tract data: U.S. Census Bureau' },
+    attributionControl: { compact: true, customAttribution: 'Data: U.S. Census Bureau' },
   });
   map.touchZoomRotate.disableRotation();
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), window.innerWidth > 640 ? 'top-right' : 'bottom-left');
@@ -303,6 +406,8 @@
   window._map = map;
 
   const hoverOn = ['boolean', ['feature-state', 'hover'], false];
+  let underRoads, ready = false;
+
   map.once('style.load', () => {
     map.addSource('tracts', {
       type: 'geojson', data: { type: 'FeatureCollection', features },
@@ -311,13 +416,13 @@
     features.length = 0;
     map.addSource('borders-county', { type: 'geojson', data: countyLines, maxzoom: 10, tolerance: 0.3 });
     map.addSource('borders-state', { type: 'geojson', data: stateLines, maxzoom: 10, tolerance: 0.3 });
-    // Tracts sit under the basemap's roads; borders sit under its labels.
+    // Areas sit under the basemap's roads; borders sit under its labels.
     const layers = map.getStyle().layers;
-    const underRoads = (layers.find((l) => l['source-layer'] === 'transportation') || {}).id;
+    underRoads = (layers.find((l) => l['source-layer'] === 'transportation') || {}).id;
     const underLabels = (layers.find((l) => l.type === 'symbol') || {}).id;
     map.addLayer({
       id: 'tract-fill', type: 'fill', source: 'tracts',
-      paint: { 'fill-color': paintFor(mode), 'fill-antialias': false },
+      paint: { 'fill-color': paintFor(mode, 'tract'), 'fill-antialias': false },
     }, underRoads);
     // Tracts without an estimate get a hatch so they are not mistaken for water.
     const hc = document.createElement('canvas');
@@ -355,64 +460,155 @@
       paint: { 'line-color': 'rgba(18,18,18,0.75)',
                'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 10, 2.2] },
     }, underLabels);
+    hookTip('tract-fill');
     const done = () => {
       if (map.isSourceLoaded('tracts')) { $('loading').style.display = 'none'; map.off('sourcedata', done); }
     };
     map.on('sourcedata', done);
+    ready = true;
+    if (level !== 'tract') applyLevel();
   });
+
+  // County, metro and state layers are built the first time they are shown.
+  function ensureLevel(lv) {
+    const src = LEVELS[lv].src;
+    if (map.getSource(src)) return;
+    map.addSource(src, { type: 'geojson', data: levelData(lv), maxzoom: 12, tolerance: 0.2, buffer: 8 });
+    map.addLayer({
+      id: src + '-fill', type: 'fill', source: src, layout: { visibility: 'none' },
+      paint: { 'fill-color': paintFor(mode, lv), 'fill-antialias': false },
+    }, 'tract-fill');   // below the basemap's water, like the tracts
+    const thin = lv === 'county';
+    map.addLayer({
+      id: src + '-line', type: 'line', source: src, layout: { visibility: 'none' },
+      paint: {
+        'line-color': ['case', hoverOn, '#121212', 'rgba(255,255,255,0.85)'],
+        'line-width': ['interpolate', ['linear'], ['zoom'],
+          3, ['case', hoverOn, 1.5, thin ? 0.15 : 0.5], 7, ['case', hoverOn, 2.5, thin ? 0.6 : 1.2],
+          12, ['case', hoverOn, 3, thin ? 1.2 : 2]],
+      },
+    }, 'county-line');
+    hookTip(src + '-fill');
+  }
+
+  // Hidden layers drop their tiles, so switching level can take a moment to
+  // redraw; say so if it takes longer than a blink.
+  function applyLevel() {
+    if (!ready) return;
+    let timer = null;
+    const busy = () => { $('loading-msg').textContent = LEVELS[level].loading; $('loading').style.display = 'flex'; };
+    const show = () => {
+      if (level !== 'tract') ensureLevel(level);
+      const vis = (id, on) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); };
+      for (const id of ['tract-fill', 'tract-nodata', 'tract-line']) vis(id, level === 'tract');
+      for (const lv in LEVELS) if (lv !== 'tract') {
+        vis(LEVELS[lv].src + '-fill', level === lv);
+        vis(LEVELS[lv].src + '-line', level === lv);
+      }
+      vis('county-line', level === 'tract' || level === 'county');
+      map.setPaintProperty(fillId(level), 'fill-color', paintFor(mode, level));
+      map.once('idle', () => { clearTimeout(timer); $('loading').style.display = 'none'; });
+    };
+    if (level !== 'tract' && !map.getSource(LEVELS[level].src)) {
+      busy();
+      setTimeout(show, 30);   // let the loading message paint before the work starts
+    } else {
+      timer = setTimeout(busy, 200);
+      show();
+    }
+  }
 
   // ---------------------------------------------------------------- legend
   function renderPanel() {
-    const m = MODES[mode];
+    const m = info(mode, level), lv = LEVELS[level];
+    $('eyebrow').textContent = lv.eyebrow + ' · ACS 2020–2024';
+    $('title').textContent = 'Births and Marriage, ' + lv.h1;
     $('legend-title').textContent = m.title;
     $('legend').innerHTML = m.colors.map((c, i) =>
       '<div class="sw"><i style="background:' + c + '"></i><span>' + m.labels[i] + '</span></div>').join('');
     $('us-avg').textContent = m.avg;
+    $('nd-key').style.visibility = level === 'tract' ? 'visible' : 'hidden';
     $('desc').innerHTML = m.desc;
     document.querySelectorAll('.modes button').forEach((b) =>
       b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    document.querySelectorAll('.levels button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.level === level)));
   }
   document.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => {
     mode = b.dataset.mode;
     renderPanel();
-    if (map.getLayer('tract-fill')) map.setPaintProperty('tract-fill', 'fill-color', paintFor(mode));
+    if (map.getLayer(fillId(level))) map.setPaintProperty(fillId(level), 'fill-color', paintFor(mode, level));
     if (lastId !== null) fillTip(lastId);
+  }));
+  document.querySelectorAll('.levels button').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.level === level) return;
+    hideTip();
+    level = b.dataset.level;
+    renderPanel();
+    applyLevel();
   }));
   renderPanel();
 
   // --------------------------------------------------------------- tooltip
   const tip = $('tip');
   const fmt = (n) => n.toLocaleString('en-US');
-  let hoverId = null, lastId = null;
+  let hoverId = null, hoverSrc = null, lastId = null;
+  const key = (k, v) => '<span class="key" style="background:' + colorFor(k, v, level) + '"></span>';
+  const moe = (v) => v < 0 ? '' : ' <small>±' + (v / 10).toFixed(1) + '</small>';
+  const row = (k, label, value) =>
+    '<div class="row' + (mode === k ? ' on' : '') + '"><span>' + label + '</span><b>' + value + '</b></div>';
+
   function fillTip(i) {
-    const g = H.geoids[i], t = g.slice(5);
+    if (level !== 'tract') return fillAreaTip(i);
+    const g = H.geoids[i], t = g.slice(5), v = vals.tract;
     const name = 'Census Tract ' + parseInt(t.slice(0, 4), 10) + (t.slice(4) === '00' ? '' : '.' + t.slice(4));
     const place = H.counties[g.slice(0, 5)] || '';
     let rows;
-    if (val.s[i] < 0) {
+    if (v.s[i] < 0) {
       rows = '<div class="row">' + (D.pop[i] === 0 ? 'No residents in this tract.' : 'No ACS estimate published for this tract.') + '</div>';
     } else {
-      const key = (k, v) => '<span class="key" style="background:' + colorFor(k, v) + '"></span>';
-      const moe = (v, unit) => v < 0 ? '' : ' <small>±' + (v / 10).toFixed(1) + unit + '</small>';
       rows =
-        '<div class="row' + (mode === 'b' ? ' on' : '') + '"><span>' + key('b', val.b[i]) + 'Births per 1,000</span><b>' +
-          val.b[i].toFixed(1) + moe(D.bmoe[i], '') + '</b></div>' +
-        '<div class="row' + (mode === 'm' ? ' on' : '') + '"><span>' + key('m', val.m[i]) + 'Married share, 15+</span><b>' +
-          val.m[i].toFixed(1) + '%' + moe(D.mmoe[i], '') + '</b></div>' +
-        '<div class="row' + (mode === 's' ? ' on' : '') + '"><span>' + key('s', val.s[i]) + 'Boost</span><b>' +
-          val.s[i] + ' of 10 <small>births ' + D.bpts[i] + ' + marriage ' + D.mpts[i] + '</small></b></div>' +
+        row('b', key('b', v.b[i]) + 'Births per 1,000', v.b[i].toFixed(1) + moe(D.bmoe[i])) +
+        row('m', key('m', v.m[i]) + 'Married share, 15+', v.m[i].toFixed(1) + '%' + moe(D.mmoe[i])) +
+        row('s', key('s', v.s[i]) + 'Boost', v.s[i] + ' of 10 <small>births ' + D.bpts[i] + ' + marriage ' + D.mpts[i] + '</small>') +
         '<div class="foot">Population ' + fmt(D.pop[i]) + ' · ' + fmt(D.births[i]) + ' births in past year · ' +
           fmt(D.married[i]) + ' married of ' + fmt(D.p15[i]) + ' age 15+<br>± is the 90% margin of error.</div>';
     }
     tip.innerHTML = '<div class="t1">' + name + '</div><div class="t2">' + place + '</div>' + rows;
   }
+
+  function fillAreaTip(i) {
+    const G = L[level], d = G.data, v = vals[level], id = G.ids[i];
+    let t1 = G.names[i], t2 = '';
+    if (level === 'county') { const p = t1.split(', '); t1 = p[0]; t2 = p.slice(1).join(', '); }
+    else if (level === 'metro') t2 = id[0] === 'N' ? 'Counties outside any metro area' : 'Metropolitan area';
+    t2 += (t2 ? ' · ' : '') + fmt(d.nt[i]) + ' census tract' + (d.nt[i] === 1 ? '' : 's');
+    const own = d.bpts[i] + d.mpts[i];
+    const rows =
+      row('b', key('b', v.b[i]) + 'Births per 1,000', v.b[i].toFixed(1) + moe(d.bmoe[i])) +
+      row('m', key('m', v.m[i]) + 'Married share, 15+', v.m[i].toFixed(1) + '%' + moe(d.mmoe[i])) +
+      row('s', key('s', v.s[i]) + 'Average tract Boost', (v.s[i] < 0 ? '–' : v.s[i].toFixed(1) + ' of 10')) +
+      (d.hi[i] < 0 ? '' : '<div class="row sub"><span>Residents in tracts scoring 8 or 10</span><b>' +
+        (d.hi[i] / 10).toFixed(0) + '%</b></div>') +
+      '<div class="row sub"><span>Boost if scored as one area</span><b>' + own +
+        ' <small>births ' + d.bpts[i] + ' + marriage ' + d.mpts[i] + '</small></b></div>' +
+      '<div class="foot">Population ' + fmt(d.pop[i]) + ' · ' + fmt(d.births[i]) + ' births in past year · ' +
+        fmt(d.married[i]) + ' married of ' + fmt(d.p15[i]) + ' age 15+<br>' +
+        'Rates are ACS estimates for the whole area (± is the 90% margin of error). ' +
+        'U.S. average tract Boost: ' + (US.avg || 0).toFixed(1) + '; ' + Math.round(100 * (US.hi || 0)) +
+        '% of residents live in tracts scoring 8 or 10.</div>';
+    tip.innerHTML = '<div class="t1">' + t1 + '</div><div class="t2">' + t2 + '</div>' + rows;
+  }
+
   function showTip(e) {
     const f = e.features && e.features[0];
     if (!f) return;
-    if (hoverId !== f.id) {
-      if (hoverId !== null) map.setFeatureState({ source: 'tracts', id: hoverId }, { hover: false });
+    const src = f.source;
+    if (hoverId !== f.id || hoverSrc !== src) {
+      if (hoverId !== null) map.setFeatureState({ source: hoverSrc, id: hoverId }, { hover: false });
       hoverId = lastId = f.id;
-      map.setFeatureState({ source: 'tracts', id: hoverId }, { hover: true });
+      hoverSrc = src;
+      map.setFeatureState({ source: src, id: hoverId }, { hover: true });
       fillTip(f.id);
     }
     tip.style.display = 'block';
@@ -424,14 +620,16 @@
     tip.style.top = Math.max(8, y) + 'px';
   }
   function hideTip() {
-    if (hoverId !== null) map.setFeatureState({ source: 'tracts', id: hoverId }, { hover: false });
-    hoverId = lastId = null;
+    if (hoverId !== null && map.getSource(hoverSrc)) map.setFeatureState({ source: hoverSrc, id: hoverId }, { hover: false });
+    hoverId = lastId = hoverSrc = null;
     tip.style.display = 'none';
   }
-  map.on('mousemove', 'tract-fill', showTip);
-  map.on('click', 'tract-fill', showTip);
-  map.on('mouseleave', 'tract-fill', hideTip);
-  map.on('mouseenter', 'tract-fill', () => { map.getCanvas().style.cursor = 'crosshair'; });
+  function hookTip(layerId) {
+    map.on('mousemove', layerId, showTip);
+    map.on('click', layerId, showTip);
+    map.on('mouseleave', layerId, hideTip);
+    map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'crosshair'; });
+  }
   map.on('movestart', () => { tip.style.display = 'none'; });
 })();
 </script>
