@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Births, Marriage &amp; Boost by Census Tract</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1C1678;
+    --cyan: #00AAEB;
+    --peach: #FFB77C;
+    --beige: #FBFAF3;
+    --beige-2: #F7F5E8;
+    --ink: #121212;
+    --ink-2: #394150;
+    --ink-3: #6C727F;
+    --rule: #D3D5DA;
+    --rule-2: #E5E6EB;
+    --nodata: #C4C7CE;
+    --sans: 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: var(--sans); color: var(--ink); background: var(--beige); }
+  #map { position: absolute; inset: 0; background: #EEF1F4; }
+
+  .panel {
+    position: absolute; top: 16px; left: 16px; z-index: 5;
+    width: 340px; max-width: calc(100vw - 32px);
+    background: var(--beige); border: 1px solid var(--rule);
+    border-top: 4px solid var(--navy);
+    border-radius: 4px; padding: 16px 18px 14px;
+    box-shadow: 0 6px 24px rgba(18, 18, 18, .14);
+  }
+  .eyebrow {
+    font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--navy); margin: 0 0 6px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 700; font-size: 23px; line-height: 1.18;
+    margin: 0 0 12px; color: var(--ink); text-wrap: balance;
+  }
+  .modes {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    border: 1px solid var(--navy); border-radius: 4px; overflow: hidden; margin-bottom: 12px;
+  }
+  .modes button {
+    font: 700 13px/1 var(--sans); padding: 10px 4px; border: 0; cursor: pointer;
+    background: #fff; color: var(--navy); border-left: 1px solid var(--navy);
+  }
+  .modes button:first-child { border-left: 0; }
+  .modes button:hover { background: #EEF0FA; }
+  .modes button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+  .modes button:focus-visible { outline: 3px solid var(--cyan); outline-offset: -3px; }
+
+  .legend-title { font-size: 13px; font-weight: 700; margin: 0 0 6px; color: var(--ink); }
+  .legend { display: flex; gap: 2px; margin: 0 0 4px; }
+  .legend .sw { flex: 1 1 0; min-width: 0; text-align: center; }
+  .legend .sw i { display: block; height: 14px; border-radius: 2px; }
+  .legend .sw span {
+    display: block; font-size: 11px; color: var(--ink-2); margin-top: 4px;
+    white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .legend-foot {
+    display: flex; justify-content: space-between; gap: 10px; align-items: center;
+    font-size: 12px; color: var(--ink-2); margin: 8px 0 0;
+  }
+  .legend-foot .nd { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .legend-foot .nd i {
+    width: 14px; height: 14px; border-radius: 2px; display: inline-block; border: 1px solid var(--nodata);
+    background: repeating-linear-gradient(45deg, #ECEDF0 0 2.5px, #9EA3AE 2.5px 4px);
+  }
+  .desc { font-size: 13px; line-height: 1.45; color: var(--ink-2); margin: 10px 0 0; }
+  .rules { width: 100%; border-collapse: collapse; margin: 8px 0 0; font-size: 12px; color: var(--ink-2); }
+  .rules td { padding: 3px 0; border-top: 1px solid var(--rule-2); }
+  .rules td:last-child { text-align: right; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .source { font-size: 11px; line-height: 1.4; color: var(--ink-3); margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--rule); }
+
+  .tip {
+    position: absolute; z-index: 6; pointer-events: none; display: none;
+    width: 270px; background: #fff; border: 1px solid var(--rule); border-radius: 4px;
+    padding: 10px 12px; box-shadow: 0 4px 16px rgba(18, 18, 18, .18); font-size: 13px;
+  }
+  .tip .t1 { font-family: var(--serif); font-weight: 700; font-size: 15px; line-height: 1.2; }
+  .tip .t2 { color: var(--ink-3); font-size: 12px; margin: 2px 0 8px; }
+  .tip .row {
+    display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+    padding: 5px 6px; margin: 0 -6px; border-radius: 3px; color: var(--ink-2);
+  }
+  .tip .row b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tip .row small { color: var(--ink-3); font-weight: 400; font-size: 11px; }
+  .tip .row.on { background: var(--beige-2); color: var(--ink); }
+  .tip .row .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; border: 1px solid rgba(18,18,18,.15); }
+  .tip .foot { color: var(--ink-3); font-size: 11px; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--rule-2); line-height: 1.4; }
+
+  #loading {
+    position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    background: rgba(251, 250, 243, .92); text-align: center; padding: 24px;
+  }
+  #loading div { font-family: var(--serif); font-size: 20px; color: var(--navy); }
+  #loading small { display: block; font-family: var(--sans); font-size: 13px; color: var(--ink-3); margin-top: 8px; }
+
+  .maplibregl-ctrl-attrib { font-family: var(--sans); font-size: 11px; }
+
+  @media (max-width: 640px) {
+    .panel { top: 8px; left: 8px; max-width: calc(100vw - 16px); padding: 10px 12px; }
+    h1 { font-size: 18px; margin-bottom: 8px; }
+    .eyebrow, .desc, .rules, .source { display: none; }
+    .tip { width: 240px; }
+  }
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Map of U.S. census tracts"></div>
+
+<section class="panel" aria-label="Map controls and legend">
+  <p class="eyebrow">Census tracts · ACS 2020–2024</p>
+  <h1>Births and Marriage, Neighborhood by Neighborhood</h1>
+  <div class="modes" role="group" aria-label="Map mode">
+    <button type="button" data-mode="b" aria-pressed="true">Birth rate</button>
+    <button type="button" data-mode="m" aria-pressed="false">Married share</button>
+    <button type="button" data-mode="s" aria-pressed="false">Boost</button>
+  </div>
+  <p class="legend-title" id="legend-title"></p>
+  <div class="legend" id="legend"></div>
+  <div class="legend-foot"><span id="us-avg"></span><span class="nd"><i></i>No data</span></div>
+  <div id="desc"></div>
+  <p class="source">Source: U.S. Census Bureau, American Community Survey 2020–2024 five-year estimates
+    (tables B13002, B12001, B01003). Tract estimates come from small samples and can be imprecise;
+    hover a tract for its margin of error.</p>
+</section>
+
+<div class="tip" id="tip" role="status"></div>
+<div id="loading"><div><span id="loading-msg">Loading 85,000 census tracts…</span><small>This can take a few seconds.</small></div></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+(async function () {
+  const $ = (id) => document.getElementById(id);
+  const fail = (msg) => { $('loading-msg').textContent = msg; };
+  if (!window.maplibregl) { fail('This map needs an internet connection to load its map library.'); return; }
+
+  const stylePromise = fetch('https://tiles.openfreemap.org/styles/positron', { signal: AbortSignal.timeout(8000) })
+    .then((r) => { if (!r.ok) throw new Error('basemap ' + r.status); return r.json(); })
+    .catch((e) => {
+      console.warn('Basemap unavailable; showing tracts only.', e);
+      return { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#EEF1F4' } }] };
+    });
+
+  // ---------------------------------------------------------------- unpack
+  async function gunzip(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(url + ' ' + r.status);
+    const u8 = new Uint8Array(await r.arrayBuffer());
+    if (!(u8[0] === 0x1f && u8[1] === 0x8b)) return new Response(u8);  // already decompressed in transit
+    const stream = new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream);
+  }
+  let H, arcBuf;
+  try {
+    const [hr, ar] = await Promise.all([gunzip('header.bin'), gunzip('arcs.bin')]);
+    H = await hr.json();
+    arcBuf = new Uint8Array(await ar.arrayBuffer());
+  } catch (e) {
+    fail('Could not load the map data.'); console.error(e); return;
+  }
+  const D = H.data, N = H.geoids.length, US = H.us;
+
+  // arcs: varint point count, then zigzag varint x/y deltas
+  const arcs = new Array(H.nArcs);
+  {
+    let p = 0;
+    const next = () => { let r = 0, s = 0, b; do { b = arcBuf[p++]; r |= (b & 0x7f) << s; s += 7; } while (b & 0x80); return r >>> 0; };
+    for (let a = 0; a < H.nArcs; a++) {
+      const n = next(), out = new Float64Array(n * 2);
+      let x = 0, y = 0;
+      for (let k = 0; k < n; k++) {
+        let z = next(); x += (z >>> 1) ^ -(z & 1);
+        z = next(); y += (z >>> 1) ^ -(z & 1);
+        out[2 * k] = x / H.q; out[2 * k + 1] = y / H.q;
+      }
+      arcs[a] = out;
+    }
+  }
+  arcBuf = null;
+
+  // per-tract values
+  const val = { b: new Float32Array(N), m: new Float32Array(N), s: new Int8Array(N) };
+  for (let i = 0; i < N; i++) {
+    const ok = D.pop[i] > 0 && D.p15[i] > 0;
+    val.b[i] = ok ? 1000 * D.births[i] / D.pop[i] : -1;
+    val.m[i] = ok ? 100 * D.married[i] / D.p15[i] : -1;
+    val.s[i] = ok ? D.bpts[i] + D.mpts[i] : -1;
+  }
+
+  // tract polygons + county/state border arcs
+  const owner = new Int32Array(H.nArcs).fill(-1), border = new Uint8Array(H.nArcs);
+  const features = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const coords = [];
+    for (const poly of H.arcs[i]) {
+      const rings = [];
+      for (const ring of poly) {
+        const out = [];
+        for (const ref of ring) {
+          const rev = ref < 0, ai = rev ? ~ref : ref, a = arcs[ai], n = a.length / 2;
+          if (rev) for (let k = n - 1; k > 0; k--) out.push([a[2 * k], a[2 * k + 1]]);
+          else for (let k = 0; k < n - 1; k++) out.push([a[2 * k], a[2 * k + 1]]);
+          if (owner[ai] === -1) owner[ai] = i;
+          else if (owner[ai] !== i) {
+            const g1 = H.geoids[i], g2 = H.geoids[owner[ai]];
+            if (g1.slice(0, 2) !== g2.slice(0, 2)) border[ai] = 2;
+            else if (g1.slice(0, 5) !== g2.slice(0, 5)) border[ai] = 1;
+          }
+        }
+        out.push(out[0]);
+        rings.push(out);
+      }
+      coords.push(rings);
+    }
+    features[i] = {
+      type: 'Feature', id: i,
+      properties: { b: +val.b[i].toFixed(2), m: +val.m[i].toFixed(2), s: val.s[i] },
+      geometry: { type: 'MultiPolygon', coordinates: coords },
+    };
+  }
+  const lines = (level) => {
+    const out = [];
+    for (let a = 0; a < H.nArcs; a++) if (border[a] === level) {
+      const arc = arcs[a], line = [];
+      for (let k = 0; k < arc.length; k += 2) line.push([arc[k], arc[k + 1]]);
+      out.push(line);
+    }
+    return { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: out } };
+  };
+  const countyLines = lines(1), stateLines = lines(2);
+  H.arcs = null;
+
+  // ----------------------------------------------------------------- modes
+  const NODATA = getComputedStyle(document.documentElement).getPropertyValue('--nodata').trim();
+  const MODES = {
+    b: {
+      title: 'Births per 1,000 residents, past 12 months',
+      breaks: [4, 8, 12, 16, 20, 30],
+      labels: ['<4', '4–8', '8–12', '12–16', '16–20', '20–30', '30+'],
+      avg: 'U.S. average: ' + US.b.toFixed(1) + ' per 1,000',
+      desc: '<p class="desc">Crude birth rate: women ages 15–50 who gave birth in the past 12 months, divided by the tract’s total population.</p>',
+    },
+    m: {
+      title: 'Married share of residents 15 and older',
+      breaks: [20, 30, 40, 50, 60, 70],
+      labels: ['<20%', '20–30', '30–40', '40–50', '50–60', '60–70', '70%+'],
+      avg: 'U.S. average: ' + US.m.toFixed(1) + '%',
+      desc: '<p class="desc">People who are currently married (not counting those who are separated) as a share of everyone age 15 and older.</p>',
+    },
+    s: {
+      title: 'Boost score, 0 to 10',
+      breaks: [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 7, 9],
+      labels: ['0', '1', '2', '3', '4', '5', '6', '8', '10'],
+      avg: 'Up to 5 points each for births and marriage',
+      desc: '<p class="desc">Each tract earns points for its birth rate (' + (US.b / 10).toFixed(2) +
+        '% of residents nationally) and its married share (' + US.m.toFixed(1) + '% nationally):</p>' +
+        '<table class="rules"><tr><td>More than 1 point above the U.S. average</td><td>5 pts</td></tr>' +
+        '<tr><td>At the average, or up to 1 point above</td><td>3 pts</td></tr>' +
+        '<tr><td>Up to 1 point below the average</td><td>1 pt</td></tr>' +
+        '<tr><td>More than 1 point below</td><td>0 pts</td></tr></table>',
+    },
+  };
+  for (const k in MODES) MODES[k].colors = H.ramps[k];
+  const colorFor = (k, v) => {
+    if (v < 0) return NODATA;
+    const m = MODES[k]; let i = 0;
+    while (i < m.breaks.length && v >= m.breaks[i]) i++;
+    return m.colors[i];
+  };
+  const paintFor = (k) => {
+    const m = MODES[k], step = ['step', ['get', k], m.colors[0]];
+    m.breaks.forEach((b, i) => step.push(b, m.colors[i + 1]));
+    return ['case', ['<', ['get', k], 0], NODATA, step];
+  };
+  let mode = 'b';
+
+  // ------------------------------------------------------------------- map
+  // Basemap (roads, water, place names) from OpenFreeMap; the tract layers still
+  // work on a plain background if it cannot be reached.
+  const style = await stylePromise;
+  const map = new maplibregl.Map({
+    container: 'map',
+    style,
+    bounds: [[-125, 24], [-66.5, 49.6]],
+    fitBoundsOptions: { padding: { top: 30, bottom: 30, left: window.innerWidth > 900 ? 370 : 20, right: 20 } },
+    minZoom: 2.5, maxZoom: 15, dragRotate: false, pitchWithRotate: false,
+    attributionControl: { compact: true, customAttribution: 'Tract data: U.S. Census Bureau' },
+  });
+  map.touchZoomRotate.disableRotation();
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), window.innerWidth > 640 ? 'top-right' : 'bottom-left');
+  map.addControl(new maplibregl.ScaleControl({ unit: 'imperial' }), 'bottom-right');
+  window._map = map;
+
+  const hoverOn = ['boolean', ['feature-state', 'hover'], false];
+  map.once('style.load', () => {
+    map.addSource('tracts', {
+      type: 'geojson', data: { type: 'FeatureCollection', features },
+      maxzoom: 12, tolerance: 0.1, buffer: 8,
+    });
+    features.length = 0;
+    map.addSource('borders-county', { type: 'geojson', data: countyLines, maxzoom: 10, tolerance: 0.3 });
+    map.addSource('borders-state', { type: 'geojson', data: stateLines, maxzoom: 10, tolerance: 0.3 });
+    // Tracts sit under the basemap's roads; borders sit under its labels.
+    const layers = map.getStyle().layers;
+    const underRoads = (layers.find((l) => l['source-layer'] === 'transportation') || {}).id;
+    const underLabels = (layers.find((l) => l.type === 'symbol') || {}).id;
+    map.addLayer({
+      id: 'tract-fill', type: 'fill', source: 'tracts',
+      paint: { 'fill-color': paintFor(mode), 'fill-antialias': false },
+    }, underRoads);
+    // Tracts without an estimate get a hatch so they are not mistaken for water.
+    const hc = document.createElement('canvas');
+    hc.width = hc.height = 16;
+    const hx = hc.getContext('2d');
+    hx.fillStyle = '#ECEDF0'; hx.fillRect(0, 0, 16, 16);
+    hx.strokeStyle = '#9EA3AE'; hx.lineWidth = 2.2; hx.lineCap = 'square';
+    for (const o of [-16, 0, 16]) { hx.beginPath(); hx.moveTo(o - 2, 18); hx.lineTo(o + 18, -2); hx.stroke(); }
+    map.addImage('hatch', hx.getImageData(0, 0, 16, 16), { pixelRatio: 2 });
+    map.addLayer({
+      id: 'tract-nodata', type: 'fill', source: 'tracts', filter: ['<', ['get', 's'], 0],
+      paint: { 'fill-pattern': 'hatch' },
+    }, underRoads);
+    // Keep the basemap's roads as a faint guide rather than the main event.
+    for (const l of layers) {
+      if (l['source-layer'] === 'transportation' && l.type === 'line')
+        map.setPaintProperty(l.id, 'line-opacity', /minor|path|rail|pier|service/.test(l.id) ? 0.3 : 0.6);
+    }
+    map.addLayer({
+      id: 'tract-line', type: 'line', source: 'tracts', minzoom: 7,
+      paint: {
+        'line-color': ['case', hoverOn, '#121212', 'rgba(255,255,255,0.7)'],
+        'line-width': ['interpolate', ['linear'], ['zoom'],
+          7, ['case', hoverOn, 1.5, 0.1], 10, ['case', hoverOn, 2.5, 0.4], 13, ['case', hoverOn, 3, 1]],
+      },
+    }, underRoads);
+    for (const id of ['water', 'waterway']) if (map.getLayer(id)) map.moveLayer(id, underRoads);
+    map.addLayer({
+      id: 'county-line', type: 'line', source: 'borders-county', minzoom: 5,
+      paint: { 'line-color': 'rgba(18,18,18,0.45)',
+               'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.25, 10, 1.2] },
+    }, underLabels);
+    map.addLayer({
+      id: 'state-line', type: 'line', source: 'borders-state',
+      paint: { 'line-color': 'rgba(18,18,18,0.75)',
+               'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 10, 2.2] },
+    }, underLabels);
+    const done = () => {
+      if (map.isSourceLoaded('tracts')) { $('loading').style.display = 'none'; map.off('sourcedata', done); }
+    };
+    map.on('sourcedata', done);
+  });
+
+  // ---------------------------------------------------------------- legend
+  function renderPanel() {
+    const m = MODES[mode];
+    $('legend-title').textContent = m.title;
+    $('legend').innerHTML = m.colors.map((c, i) =>
+      '<div class="sw"><i style="background:' + c + '"></i><span>' + m.labels[i] + '</span></div>').join('');
+    $('us-avg').textContent = m.avg;
+    $('desc').innerHTML = m.desc;
+    document.querySelectorAll('.modes button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  }
+  document.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => {
+    mode = b.dataset.mode;
+    renderPanel();
+    if (map.getLayer('tract-fill')) map.setPaintProperty('tract-fill', 'fill-color', paintFor(mode));
+    if (lastId !== null) fillTip(lastId);
+  }));
+  renderPanel();
+
+  // --------------------------------------------------------------- tooltip
+  const tip = $('tip');
+  const fmt = (n) => n.toLocaleString('en-US');
+  let hoverId = null, lastId = null;
+  function fillTip(i) {
+    const g = H.geoids[i], t = g.slice(5);
+    const name = 'Census Tract ' + parseInt(t.slice(0, 4), 10) + (t.slice(4) === '00' ? '' : '.' + t.slice(4));
+    const place = H.counties[g.slice(0, 5)] || '';
+    let rows;
+    if (val.s[i] < 0) {
+      rows = '<div class="row">' + (D.pop[i] === 0 ? 'No residents in this tract.' : 'No ACS estimate published for this tract.') + '</div>';
+    } else {
+      const key = (k, v) => '<span class="key" style="background:' + colorFor(k, v) + '"></span>';
+      const moe = (v, unit) => v < 0 ? '' : ' <small>±' + (v / 10).toFixed(1) + unit + '</small>';
+      rows =
+        '<div class="row' + (mode === 'b' ? ' on' : '') + '"><span>' + key('b', val.b[i]) + 'Births per 1,000</span><b>' +
+          val.b[i].toFixed(1) + moe(D.bmoe[i], '') + '</b></div>' +
+        '<div class="row' + (mode === 'm' ? ' on' : '') + '"><span>' + key('m', val.m[i]) + 'Married share, 15+</span><b>' +
+          val.m[i].toFixed(1) + '%' + moe(D.mmoe[i], '') + '</b></div>' +
+        '<div class="row' + (mode === 's' ? ' on' : '') + '"><span>' + key('s', val.s[i]) + 'Boost</span><b>' +
+          val.s[i] + ' of 10 <small>births ' + D.bpts[i] + ' + marriage ' + D.mpts[i] + '</small></b></div>' +
+        '<div class="foot">Population ' + fmt(D.pop[i]) + ' · ' + fmt(D.births[i]) + ' births in past year · ' +
+          fmt(D.married[i]) + ' married of ' + fmt(D.p15[i]) + ' age 15+<br>± is the 90% margin of error.</div>';
+    }
+    tip.innerHTML = '<div class="t1">' + name + '</div><div class="t2">' + place + '</div>' + rows;
+  }
+  function showTip(e) {
+    const f = e.features && e.features[0];
+    if (!f) return;
+    if (hoverId !== f.id) {
+      if (hoverId !== null) map.setFeatureState({ source: 'tracts', id: hoverId }, { hover: false });
+      hoverId = lastId = f.id;
+      map.setFeatureState({ source: 'tracts', id: hoverId }, { hover: true });
+      fillTip(f.id);
+    }
+    tip.style.display = 'block';
+    const w = tip.offsetWidth, h = tip.offsetHeight, pad = 14;
+    let x = e.point.x + pad, y = e.point.y + pad;
+    if (x + w > window.innerWidth - 8) x = e.point.x - w - pad;
+    if (y + h > window.innerHeight - 8) y = e.point.y - h - pad;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.max(8, y) + 'px';
+  }
+  function hideTip() {
+    if (hoverId !== null) map.setFeatureState({ source: 'tracts', id: hoverId }, { hover: false });
+    hoverId = lastId = null;
+    tip.style.display = 'none';
+  }
+  map.on('mousemove', 'tract-fill', showTip);
+  map.on('click', 'tract-fill', showTip);
+  map.on('mouseleave', 'tract-fill', hideTip);
+  map.on('mouseenter', 'tract-fill', () => { map.getCanvas().style.cursor = 'crosshair'; });
+  map.on('movestart', () => { tip.style.display = 'none'; });
+})();
+</script>
+</body>
+</html>
